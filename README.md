@@ -44,8 +44,8 @@ OpenStaty is a privacy-first, offline analytics tool designed to visualize your 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/open_staty.git
-   cd open_staty
+   git clone https://github.com/Sallytion/Open-Staty.git
+   cd Open-Staty
    ```
 
 2. **Install dependencies**
@@ -125,4 +125,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 📬 Contact
 
-Project Link: [https://github.com/yourusername/open_staty](https://github.com/yourusername/open_staty)
+Project Link: [https://github.com/Sallytion/Open-Staty](https://github.com/sallytion/Open-Staty)
