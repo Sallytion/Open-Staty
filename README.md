@@ -34,6 +34,18 @@ OpenStaty is a privacy-first, offline analytics tool designed to visualize your 
 
 ---
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="screenshots/screenshot_1.png" width="200" />
+  <img src="screenshots/screenshot_2.png" width="200" />
+  <img src="screenshots/screenshot_3.png" width="200" />
+  <img src="screenshots/screenshot_4.png" width="200" />
+  <img src="screenshots/screenshot_5.png" width="200" />
+</p>
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
