@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -177,6 +178,51 @@ class SettingsPage extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     color: subtleText,
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // GitHub Repo Link
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      final url = Uri.parse('https://github.com/Sallytion/Open-Staty');
+                      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+                        if (context.mounted) {
+                           ScaffoldMessenger.of(context).showSnackBar(
+                             const SnackBar(content: Text('Could not open GitHub link')),
+                           );
+                        }
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(50),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(50),
+                        border: Border.all(
+                          color: isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.1),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.code_rounded, size: 20, color: headingColor),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Open Source on GitHub',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: headingColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],
