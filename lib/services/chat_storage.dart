@@ -57,7 +57,6 @@ class ChatStorage {
       final List<dynamic> jsonList = json.decode(contents);
       return jsonList.map((j) => SavedChat.fromJson(j)).toList();
     } catch (e) {
-      print('❌ Error loading chats: $e');
       return [];
     }
   }

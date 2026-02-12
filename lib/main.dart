@@ -9,8 +9,14 @@ import 'pages/chats_page.dart';
 import 'pages/import_analyze_page.dart';
 import 'pages/total_stats_page.dart';
 import 'pages/onboarding_page.dart';
+import 'services/sentiment_analyzer.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize sentiment analyzer (loads model in background)
+  SentimentAnalyzer.instance.initialize();
+  
   runApp(const MyApp());
 }
 
@@ -21,7 +27,6 @@ class ProcessingLock {
 
   static bool canProcess(String path) {
     if (_isProcessing) {
-      print('🔒 ProcessingLock: Denied "$path" because _isProcessing is true');
       return false;
     }
     
@@ -34,12 +39,10 @@ class ProcessingLock {
         _lastTime != null) {
        final diff = now.difference(_lastTime!).inSeconds;
        if (diff < 10) {
-         print('🔒 ProcessingLock: Denied "$path" because it matches last path and diff is ${diff}s (<10s)');
          return false;
        }
     }
     
-    print('🔓 ProcessingLock: Allowed "$path". Setting lock.');
     _isProcessing = true;
     _lastPath = normalizedPath;
     _lastTime = now;
@@ -47,7 +50,6 @@ class ProcessingLock {
     // Auto-release lock after 10 seconds just in case
     Future.delayed(const Duration(seconds: 10), () {
       if (_isProcessing) {
-        print('🔓 ProcessingLock: Auto-released lock after 10s timeout');
         _isProcessing = false;
       }
     });
@@ -56,7 +58,6 @@ class ProcessingLock {
   }
   
   static void release() {
-    print('🔓 ProcessingLock: Released manually');
     _isProcessing = false;
   }
 }
@@ -257,7 +258,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
-  static const _channel = MethodChannel('com.example.open_staty/share');
+  static const _channel = MethodChannel('tech.sallytion.openstaty/share');
   final GlobalKey<ImportAnalyzePageState> _importKey = GlobalKey<ImportAnalyzePageState>();
   final GlobalKey<ChatsPageState> _chatsKey = GlobalKey<ChatsPageState>();
   
@@ -305,7 +306,6 @@ class _MainScreenState extends State<MainScreen> {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onSharedFile') {
         final String filePath = call.arguments as String;
-        print('📨 Received shared file: $filePath');
         _handleSharedFile(filePath);
       }
     });
@@ -315,23 +315,17 @@ class _MainScreenState extends State<MainScreen> {
     try {
       final String? filePath = await _channel.invokeMethod('getSharedFile');
       if (filePath != null) {
-        print('📨 Initial shared file found: $filePath');
         _handleSharedFile(filePath);
       }
     } catch (e) {
-      print('⚠️ No initial shared file: $e');
+      // Silently catch - no initial share
     }
   }
 
   void _handleSharedFile(String filePath) {
-    print('🔍 _handleSharedFile called with: $filePath');
-    
     if (!ProcessingLock.canProcess(filePath)) {
-      print('⚠️ Skipping duplicate share: $filePath');
       return;
     }
-    
-    print('🚀 Handling shared file: $filePath');
 
     // Switch to Import & Analyze tab
     setState(() {

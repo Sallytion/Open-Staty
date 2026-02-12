@@ -1,0 +1,10 @@
+# Placeholder File
+
+This is a placeholder to ensure the models directory is created in version control.
+
+**To enable sentiment analysis:**
+1. Follow instructions in `README.md`
+2. Add `sentiment_model.tflite` and `vocab.txt` to this directory
+3. The app will automatically detect and use them
+
+The app will work without these files, but sentiment analysis will be disabled.

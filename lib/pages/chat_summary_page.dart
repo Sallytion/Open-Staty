@@ -10,7 +10,7 @@ import '../widgets/summary/share_card_dialog.dart';
 
 import '../l10n/app_localizations.dart';
 
-class ChatSummaryPage extends StatelessWidget {
+class ChatSummaryPage extends StatefulWidget {
   final String chatName;
   final int wordCount;
   final double readingTimeMinutes;
@@ -35,6 +35,31 @@ class ChatSummaryPage extends StatelessWidget {
       analytics: chat.analytics,
     );
   }
+
+  @override
+  State<ChatSummaryPage> createState() => _ChatSummaryPageState();
+}
+
+class _ChatSummaryPageState extends State<ChatSummaryPage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  String get chatName => widget.chatName;
+  int get wordCount => widget.wordCount;
+  double get readingTimeMinutes => widget.readingTimeMinutes;
+  DateTime? get importedAt => widget.importedAt;
+  ChatAnalytics? get analytics => widget.analytics;
 
   String _formatReadingTime(BuildContext context) {
     final loc = AppLocalizations.of(context)!;
@@ -76,30 +101,6 @@ class ChatSummaryPage extends StatelessWidget {
       ),
     );
   }
-  
-  Widget _statTile(String label, String value, IconData icon, Color primary, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: primary),
-              const SizedBox(width: 4),
-              Text(label, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(value, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,13 +117,14 @@ class ChatSummaryPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: CustomScrollView(
-        slivers: [
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
           SliverAppBar(
             backgroundColor: bgColor,
             elevation: 0,
             scrolledUnderElevation: 0,
             pinned: true,
+            floating: true,
             leading: IconButton(
               icon: Icon(Icons.arrow_back, color: headingColor),
               onPressed: () => Navigator.pop(context),
@@ -145,239 +147,596 @@ class ChatSummaryPage extends StatelessWidget {
                   onPressed: () => _showShareCard(context, a, chatName, wordCount, isDark, primary),
                 ),
             ],
-          ),
-
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                const SizedBox(height: 8),
-
-                // Chat name
-                Text(
-                  chatName.replaceAll('.zip', '').replaceAll('.txt', ''),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: headingColor,
-                    letterSpacing: -0.5,
-                    height: 1.2,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-
-                if (importedAt != null)
-                  Text(
-                    '${AppLocalizations.of(context)!.translate('analyzed_on')} ${_formatDate(importedAt!)}',
-                    style: TextStyle(fontSize: 14, color: subtleText),
-                  ),
-                if (a?.firstMessageDate != null && a?.lastMessageDate != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '${_formatDate(a!.firstMessageDate!)} - ${_formatDate(a.lastMessageDate!)}',
-                      style: TextStyle(fontSize: 13, color: subtleText),
-                    ),
-                  ),
-
-                const SizedBox(height: 32),
-                Divider(color: dividerColor, height: 1),
-                const SizedBox(height: 32),
-
-                // Hero stats
-                _buildHeroStat(AppLocalizations.of(context)!.translate('total_words'), _fmtNum(wordCount), Icons.text_fields_rounded, headingColor, subtleText, primary),
-                const SizedBox(height: 32),
-                _buildHeroStat(AppLocalizations.of(context)!.translate('reading_time'), _formatReadingTime(context), Icons.schedule_rounded, headingColor, subtleText, primary),
-                const SizedBox(height: 32),
-                if (a != null) ...[
-                  _buildHeroStat(AppLocalizations.of(context)!.translate('total_messages'), _fmtNum(a.totalMessages), Icons.chat_rounded, headingColor, subtleText, primary),
-                  const SizedBox(height: 40),
-                ],
-
-                // Streak cards
-                if (a != null) ...[
-                  Row(
-                    children: [
-                      Expanded(child: _buildClickableStreakCard(
-                        context,
-                        AppLocalizations.of(context)!.translate('longest_streak'), 
-                        '${a.longestStreak} d', 
-                        Icons.local_fire_department_rounded, 
-                        cardColor, headingColor, bodyText, primary, subtleText,
-                        a.longestStreakStart, 
-                        a.longestStreakEnd,
-                      )),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildClickableStreakCard(
-                        context,
-                        AppLocalizations.of(context)!.translate('current_streak'), 
-                        '${a.currentStreak} d', 
-                        Icons.bolt_rounded, 
-                        cardColor, headingColor, bodyText, primary, subtleText,
-                        a.currentStreakStart, 
-                        a.currentStreakEnd,
-                      )),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(child: _buildStatCard(AppLocalizations.of(context)!.translate('active_days'), '${a.activityMap.length}', Icons.calendar_today_rounded, cardColor, headingColor, bodyText, primary)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildStatCard(AppLocalizations.of(context)!.translate('pages_book'), (wordCount / 250).toStringAsFixed(1), Icons.menu_book_rounded, cardColor, headingColor, bodyText, primary)),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
-                ],
-
-                // Fun Facts
-                _buildSectionCard(
-                  AppLocalizations.of(context)!.translate('fun_facts'),
-                  Icons.lightbulb_outline_rounded,
-                  cardColor,
-                  subtleText,
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildFunFact(
-                        AppLocalizations.of(context)!.translate('pages_book_fact').replaceAll('{count}', (wordCount / 250).toStringAsFixed(0)),
-                        bodyText,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildFunFact(_getTimeComparison(context), bodyText),
-                      const SizedBox(height: 12),
-                      _buildFunFact(
-                        AppLocalizations.of(context)!.translate('blog_posts_fact').replaceAll('{count}', (wordCount / 500).toStringAsFixed(0)),
-                        bodyText,
-                      ),
-                    ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(50),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: dividerColor, width: 1),
                   ),
                 ),
-
-                const SizedBox(height: 40),
-
-                // ===== ANNIVERSARY & CHAT AGE =====
-                if (a != null && a.firstMessageDate != null) ...[
-                  _buildAnniversarySection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== WHO WOULD WIN =====
-                if (a != null && a.personStats.length == 2) ...[
-                  _buildWhoWouldWinSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== CHAT MILESTONES =====
-                if (a != null) ...[
-                  _buildMilestonesSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== PREDICTIONS =====
-                if (a != null && a.firstMessageDate != null) ...[
-                  _buildPredictionsSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== TOP WORDS SECTION =====
-                if (a != null && a.totalWordFrequency.isNotEmpty) ...[
-                  _buildTopWordsSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== WORD CLOUD =====
-                if (a != null && a.totalWordFrequency.isNotEmpty) ...[
-                  _buildWordCloudSection(context, a, cardColor, headingColor, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== QUICK STATS PER PERSON =====
-                if (a != null && a.personStats.isNotEmpty) ...[
-                  _buildPersonStatsSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== WHO WAITS LONGER =====
-                if (a != null && a.personStats.isNotEmpty) ...[
-                  _buildWhoWaitsLongerSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== WHO STARTS CONVERSATIONS =====
-                if (a != null && a.personStats.isNotEmpty) ...[
-                  _buildWhoStartsSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== MESSAGES BY TIME OF DAY =====
-                if (a != null && a.hourlyActivityMap.isNotEmpty) ...[
-                  _buildTimeOfDaySection(context, a, cardColor, headingColor, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== MESSAGES BY WEEKDAY =====
-                if (a != null && a.weekdayActivityMap.isNotEmpty) ...[
-                  _buildWeekdaySection(context, a, cardColor, headingColor, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== TOP PERIODS =====
-                if (a != null && a.activityMap.length > 7) ...[
-                  _buildTopPeriodsSection(context, a, cardColor, headingColor, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // ===== ACTIVITY HEATMAP =====
-                if (a != null && a.activityMap.isNotEmpty) ...[
-                  _buildActivityHeatmap(context, a, cardColor, headingColor, subtleText, primary, isDark),
-                  const SizedBox(height: 40),
-                ],
-
-                // Thank you
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [primary, primary.withOpacity(0.7)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.favorite_rounded, size: 32, color: Colors.white),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Open Staty',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Thanks for analyzing your chats',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                      ),
-                    ],
-                  ),
+                child: TabBar(
+                  controller: _tabController,
+                  labelColor: primary,
+                  unselectedLabelColor: subtleText,
+                  indicatorColor: primary,
+                  indicatorWeight: 2.5,
+                  labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  tabs: const [
+                    Tab(text: 'Overview'),
+                    Tab(text: 'People'),
+                    Tab(text: 'Activity'),
+                  ],
                 ),
-
-                const SizedBox(height: 48),
-              ]),
+              ),
             ),
           ),
         ],
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            // ═══════ TAB 1: OVERVIEW ═══════
+            _buildOverviewTab(context, a, bgColor, cardColor, headingColor, bodyText, subtleText, dividerColor, primary, isDark),
+            // ═══════ TAB 2: PEOPLE ═══════
+            _buildPeopleTab(context, a, bgColor, cardColor, headingColor, bodyText, subtleText, dividerColor, primary, isDark),
+            // ═══════ TAB 3: ACTIVITY ═══════
+            _buildActivityTab(context, a, bgColor, cardColor, headingColor, bodyText, subtleText, dividerColor, primary, isDark),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // TAB 1: OVERVIEW
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildOverviewTab(BuildContext context, ChatAnalytics? a, Color bgColor, Color cardColor, Color headingColor, Color bodyText, Color subtleText, Color dividerColor, Color primary, bool isDark) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      children: [
+        const SizedBox(height: 16),
+        // Chat name
+        Text(
+          chatName.replaceAll('.zip', '').replaceAll('.txt', ''),
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+            color: headingColor,
+            letterSpacing: -0.5,
+            height: 1.2,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 8),
+
+        if (importedAt != null)
+          Text(
+            '${AppLocalizations.of(context)!.translate('analyzed_on')} ${_formatDate(importedAt!)}',
+            style: TextStyle(fontSize: 14, color: subtleText),
+          ),
+        if (a?.firstMessageDate != null && a?.lastMessageDate != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '${_formatDate(a!.firstMessageDate!)} - ${_formatDate(a.lastMessageDate!)}',
+              style: TextStyle(fontSize: 13, color: subtleText),
+            ),
+          ),
+
+        const SizedBox(height: 32),
+        Divider(color: dividerColor, height: 1),
+        const SizedBox(height: 32),
+
+        // Hero stats
+        _buildHeroStat(AppLocalizations.of(context)!.translate('total_words'), _fmtNum(wordCount), Icons.text_fields_rounded, headingColor, subtleText, primary),
+        const SizedBox(height: 32),
+        _buildHeroStat(AppLocalizations.of(context)!.translate('reading_time'), _formatReadingTime(context), Icons.schedule_rounded, headingColor, subtleText, primary),
+        const SizedBox(height: 32),
+        if (a != null) ...[
+          _buildHeroStat(AppLocalizations.of(context)!.translate('total_messages'), _fmtNum(a.totalMessages), Icons.chat_rounded, headingColor, subtleText, primary),
+          const SizedBox(height: 40),
+        ],
+
+        // Streak cards
+        if (a != null) ...[
+          Row(
+            children: [
+              Expanded(child: _buildClickableStreakCard(
+                context,
+                AppLocalizations.of(context)!.translate('longest_streak'),
+                '${a.longestStreak} d',
+                Icons.local_fire_department_rounded,
+                cardColor, headingColor, bodyText, primary, subtleText,
+                a.longestStreakStart,
+                a.longestStreakEnd,
+              )),
+              const SizedBox(width: 12),
+              Expanded(child: _buildClickableStreakCard(
+                context,
+                AppLocalizations.of(context)!.translate('current_streak'),
+                '${a.currentStreak} d',
+                Icons.bolt_rounded,
+                cardColor, headingColor, bodyText, primary, subtleText,
+                a.currentStreakStart,
+                a.currentStreakEnd,
+              )),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _buildStatCard(AppLocalizations.of(context)!.translate('active_days'), '${a.activityMap.length}', Icons.calendar_today_rounded, cardColor, headingColor, bodyText, primary)),
+              const SizedBox(width: 12),
+              Expanded(child: _buildStatCard(AppLocalizations.of(context)!.translate('pages_book'), (wordCount / 250).toStringAsFixed(1), Icons.menu_book_rounded, cardColor, headingColor, bodyText, primary)),
+            ],
+          ),
+          const SizedBox(height: 40),
+        ],
+
+        // Fun Facts
+        _buildSectionCard(
+          AppLocalizations.of(context)!.translate('fun_facts'),
+          Icons.lightbulb_outline_rounded,
+          cardColor,
+          subtleText,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildFunFact(
+                AppLocalizations.of(context)!.translate('pages_book_fact').replaceAll('{count}', (wordCount / 250).toStringAsFixed(0)),
+                bodyText,
+              ),
+              const SizedBox(height: 12),
+              _buildFunFact(_getTimeComparison(context), bodyText),
+              const SizedBox(height: 12),
+              _buildFunFact(
+                AppLocalizations.of(context)!.translate('blog_posts_fact').replaceAll('{count}', (wordCount / 500).toStringAsFixed(0)),
+                bodyText,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 40),
+
+        // Anniversary & Chat Age
+        if (a != null && a.firstMessageDate != null) ...[
+          _buildAnniversarySection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 40),
+        ],
+
+        // Chat Milestones
+        if (a != null) ...[
+          _buildMilestonesSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 40),
+        ],
+
+        // Predictions
+        if (a != null && a.firstMessageDate != null) ...[
+          _buildPredictionsSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 40),
+        ],
+
+        // Thank you
+        _buildFooter(primary),
+        const SizedBox(height: 48),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // TAB 2: PEOPLE
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildPeopleTab(BuildContext context, ChatAnalytics? a, Color bgColor, Color cardColor, Color headingColor, Color bodyText, Color subtleText, Color dividerColor, Color primary, bool isDark) {
+    if (a == null) {
+      return Center(child: Text('No analytics data', style: TextStyle(color: subtleText)));
+    }
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      children: [
+        const SizedBox(height: 24),
+
+        // Sentiment Analysis
+        if (a.overallSentiment != null) ...[
+          _buildSentimentSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Top Emojis
+        if (a.totalEmojiFrequency.isNotEmpty) ...[
+          _buildTopEmojisSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Who Would Win
+        if (a.personStats.length == 2) ...[
+          _buildWhoWouldWinSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Quick Stats Per Person
+        if (a.personStats.isNotEmpty) ...[
+          _buildPersonStatsSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Who Waits Longer
+        if (a.personStats.isNotEmpty) ...[
+          _buildWhoWaitsLongerSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Who Starts Conversations
+        if (a.personStats.isNotEmpty) ...[
+          _buildWhoStartsSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        _buildFooter(primary),
+        const SizedBox(height: 48),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // TAB 3: ACTIVITY
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildActivityTab(BuildContext context, ChatAnalytics? a, Color bgColor, Color cardColor, Color headingColor, Color bodyText, Color subtleText, Color dividerColor, Color primary, bool isDark) {
+    if (a == null) {
+      return Center(child: Text('No analytics data', style: TextStyle(color: subtleText)));
+    }
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      children: [
+        const SizedBox(height: 24),
+
+        // Top Words
+        if (a.totalWordFrequency.isNotEmpty) ...[
+          _buildTopWordsSection(context, a, cardColor, headingColor, bodyText, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Word Cloud
+        if (a.totalWordFrequency.isNotEmpty) ...[
+          _buildWordCloudSection(context, a, cardColor, headingColor, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Messages by Time of Day
+        if (a.hourlyActivityMap.isNotEmpty) ...[
+          _buildTimeOfDaySection(context, a, cardColor, headingColor, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Messages by Weekday
+        if (a.weekdayActivityMap.isNotEmpty) ...[
+          _buildWeekdaySection(context, a, cardColor, headingColor, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Top Periods
+        if (a.activityMap.length > 7) ...[
+          _buildTopPeriodsSection(context, a, cardColor, headingColor, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        // Activity Heatmap
+        if (a.activityMap.isNotEmpty) ...[
+          _buildActivityHeatmap(context, a, cardColor, headingColor, subtleText, primary, isDark),
+          const SizedBox(height: 24),
+        ],
+
+        _buildFooter(primary),
+        const SizedBox(height: 48),
+      ],
+    );
+  }
+
+  Widget _buildFooter(Color primary) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [primary, primary.withOpacity(0.7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.favorite_rounded, size: 32, color: Colors.white),
+          const SizedBox(height: 12),
+          const Text(
+            'Open Staty',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Thanks for analyzing your chats',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== SENTIMENT ANALYSIS ====================
+  Widget _buildSentimentSection(BuildContext context, ChatAnalytics a, Color cardColor, Color headingColor, Color bodyText, Color subtleText, Color primary, bool isDark) {
+    final sentiment = a.overallSentiment!;
+    final moodScore = sentiment.moodScore;
+
+    String moodLabel;
+    IconData moodIcon;
+    Color moodColor;
+
+    if (moodScore > 0.3) {
+      moodLabel = 'Very Positive';
+      moodIcon = Icons.sentiment_very_satisfied_rounded;
+      moodColor = Colors.green;
+    } else if (moodScore > 0.1) {
+      moodLabel = 'Positive';
+      moodIcon = Icons.sentiment_satisfied_rounded;
+      moodColor = Colors.lightGreen;
+    } else if (moodScore > -0.1) {
+      moodLabel = 'Neutral';
+      moodIcon = Icons.sentiment_neutral_rounded;
+      moodColor = Colors.grey;
+    } else if (moodScore > -0.3) {
+      moodLabel = 'Negative';
+      moodIcon = Icons.sentiment_dissatisfied_rounded;
+      moodColor = Colors.orange;
+    } else {
+      moodLabel = 'Very Negative';
+      moodIcon = Icons.sentiment_very_dissatisfied_rounded;
+      moodColor = Colors.red;
+    }
+
+    return _buildSectionCard(
+      'SENTIMENT ANALYSIS',
+      Icons.psychology_rounded,
+      cardColor,
+      subtleText,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Overall mood badge
+          Center(
+            child: Column(
+              children: [
+                Icon(moodIcon, size: 48, color: moodColor),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: moodColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: moodColor.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    moodLabel,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: moodColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${sentiment.totalMessages} messages analyzed',
+                  style: TextStyle(fontSize: 12, color: subtleText),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Mood gradient bar
+          Text(
+            'Overall Mood',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: headingColor),
+          ),
+          const SizedBox(height: 10),
+          Stack(
+            children: [
+              Container(
+                height: 10,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(5),
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.red.shade300,
+                      Colors.orange.shade300,
+                      Colors.grey.shade400,
+                      Colors.lightGreen.shade300,
+                      Colors.green.shade400,
+                    ],
+                    stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+                  ),
+                ),
+              ),
+              // Position indicator
+              Positioned(
+                left: ((moodScore + 1) / 2).clamp(0.0, 1.0) *
+                    (MediaQuery.of(context).size.width - 48 - 48 - 16),
+                top: -3,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: moodColor, width: 3),
+                    boxShadow: [
+                      BoxShadow(
+                        color: moodColor.withOpacity(0.3),
+                        blurRadius: 6,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Negative', style: TextStyle(fontSize: 11, color: subtleText)),
+              Text('Positive', style: TextStyle(fontSize: 11, color: subtleText)),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Sentiment breakdown bars
+          _buildSentimentBar('Positive', sentiment.positivePercent, Colors.green, headingColor, isDark),
+          const SizedBox(height: 10),
+          _buildSentimentBar('Neutral', sentiment.neutralPercent, Colors.grey, headingColor, isDark),
+          const SizedBox(height: 10),
+          _buildSentimentBar('Negative', sentiment.negativePercent, Colors.red.shade400, headingColor, isDark),
+
+          // Per-person sentiment
+          if (a.personStats.values.any((p) => p.sentimentStats != null)) ...[
+            const SizedBox(height: 24),
+            Divider(color: isDark ? Colors.grey[800] : Colors.grey[200], height: 1),
+            const SizedBox(height: 20),
+            Text(
+              'Per Person',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: headingColor),
+            ),
+            const SizedBox(height: 12),
+            ...a.personStats.entries.where((e) => e.value.sentimentStats != null).map((entry) {
+              final ps = entry.value.sentimentStats!;
+              final pMood = ps.moodScore;
+              Color pColor;
+              IconData pIcon;
+              if (pMood > 0.2) {
+                pColor = Colors.green;
+                pIcon = Icons.sentiment_very_satisfied_rounded;
+              } else if (pMood > 0) {
+                pColor = Colors.lightGreen;
+                pIcon = Icons.sentiment_satisfied_rounded;
+              } else if (pMood > -0.2) {
+                pColor = Colors.grey;
+                pIcon = Icons.sentiment_neutral_rounded;
+              } else {
+                pColor = Colors.orange;
+                pIcon = Icons.sentiment_dissatisfied_rounded;
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Icon(pIcon, size: 22, color: pColor),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        entry.key,
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: headingColor),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: pColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${ps.positivePercent.toStringAsFixed(0)}% positive',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: pColor),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSentimentBar(String label, double percent, Color barColor, Color textColor, bool isDark) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 65,
+          child: Text(label, style: TextStyle(fontSize: 13, color: textColor)),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Stack(
+                children: [
+                  Container(
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.06) : Colors.grey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                  ),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.easeOutCubic,
+                    width: constraints.maxWidth * (percent / 100).clamp(0.0, 1.0),
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: barColor.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 44,
+          child: Text(
+            '${percent.toStringAsFixed(1)}%',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor),
+            textAlign: TextAlign.right,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==================== TOP EMOJIS ====================
+  Widget _buildTopEmojisSection(BuildContext context, ChatAnalytics a, Color cardColor, Color headingColor, Color bodyText, Color subtleText, Color primary, bool isDark) {
+    return _buildSectionCard(
+      'TOP EMOJIS',
+      Icons.emoji_emotions_rounded,
+      cardColor,
+      subtleText,
+      _TopEmojisWidget(
+        analytics: a,
+        headingColor: headingColor,
+        bodyText: bodyText,
+        subtleText: subtleText,
+        primary: primary,
+        isDark: isDark,
+        cardColor: cardColor,
       ),
     );
   }
@@ -1323,11 +1682,12 @@ class ChatSummaryPage extends StatelessWidget {
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 // Drag handle
                 Container(
                   width: 40,
@@ -1422,10 +1782,11 @@ class ChatSummaryPage extends StatelessWidget {
               ],
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildSectionCard(String title, IconData icon, Color cardColor, Color subtleText, Widget child) {
     return Container(
@@ -1756,3 +2117,196 @@ class _TopWordsWidgetState extends State<_TopWordsWidget> {
   }
 }
 
+// ==================== TOP EMOJIS WIDGET (Stateful for tab switching) ====================
+class _TopEmojisWidget extends StatefulWidget {
+  final ChatAnalytics analytics;
+  final Color headingColor, bodyText, subtleText, primary, cardColor;
+  final bool isDark;
+
+  const _TopEmojisWidget({
+    required this.analytics,
+    required this.headingColor,
+    required this.bodyText,
+    required this.subtleText,
+    required this.primary,
+    required this.isDark,
+    required this.cardColor,
+  });
+
+  @override
+  State<_TopEmojisWidget> createState() => _TopEmojisWidgetState();
+}
+
+class _TopEmojisWidgetState extends State<_TopEmojisWidget> {
+  int _selectedTab = 0;
+
+  String _fmtNum(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return n.toString();
+  }
+
+  List<MapEntry<String, int>> _getEmojis() {
+    if (_selectedTab == 0) {
+      return widget.analytics.totalTopEmojis(5);
+    } else {
+      final name = widget.analytics.personNames[_selectedTab - 1];
+      final ps = widget.analytics.personStats[name];
+      return ps?.topEmojis(5) ?? [];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tabs = ['Total', ...widget.analytics.personNames];
+    final emojis = _getEmojis();
+    final colors = [
+      widget.primary,
+      widget.primary.withOpacity(0.7),
+      Colors.amber[700]!,
+      Colors.teal,
+      Colors.orange[600]!,
+    ];
+
+    // Find max count for bar sizing
+    final maxCount = emojis.isNotEmpty ? emojis.first.value : 1;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Tab chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: List.generate(tabs.length, (i) {
+              final selected = _selectedTab == i;
+              return Padding(
+                padding: EdgeInsets.only(right: i < tabs.length - 1 ? 8 : 0),
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedTab = i),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? (colors[i % colors.length]).withOpacity(0.15)
+                          : widget.isDark
+                              ? const Color(0xFF2A2A2A)
+                              : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: selected
+                            ? colors[i % colors.length]
+                            : widget.isDark
+                                ? Colors.grey[700]!
+                                : Colors.grey[300]!,
+                        width: selected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Text(
+                      tabs[i],
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected ? colors[i % colors.length] : widget.bodyText,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        if (emojis.isEmpty)
+          Text(
+            'No emojis found',
+            style: TextStyle(color: widget.subtleText, fontSize: 14),
+          )
+        else
+          // Emoji list with frequency bars
+          ...emojis.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final emoji = entry.value;
+            final ratio = maxCount > 0 ? emoji.value / maxCount : 0.0;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  // Rank
+                  SizedBox(
+                    width: 24,
+                    child: Text(
+                      '${idx + 1}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: idx < 3 ? widget.primary : widget.subtleText,
+                      ),
+                    ),
+                  ),
+                  // Emoji
+                  SizedBox(
+                    width: 36,
+                    child: Text(
+                      emoji.key,
+                      style: const TextStyle(fontSize: 22),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Bar
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: Stack(
+                        children: [
+                          Container(
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: widget.isDark
+                                  ? Colors.white.withOpacity(0.06)
+                                  : Colors.grey.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          FractionallySizedBox(
+                            widthFactor: ratio.clamp(0.02, 1.0),
+                            child: Container(
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: idx < 3
+                                    ? widget.primary.withOpacity(0.7)
+                                    : widget.primary.withOpacity(0.35),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Count
+                  SizedBox(
+                    width: 44,
+                    child: Text(
+                      _fmtNum(emoji.value),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: idx < 3 ? widget.primary : widget.headingColor,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}

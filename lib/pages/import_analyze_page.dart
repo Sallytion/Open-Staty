@@ -8,6 +8,7 @@ import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/chat_storage.dart';
 import '../models/chat_analytics.dart';
+import '../services/sentiment_analyzer.dart';
 import 'chat_summary_page.dart';
 import 'settings_page.dart';
 import '../l10n/app_localizations.dart';
@@ -34,7 +35,6 @@ class ImportAnalyzePageState extends State<ImportAnalyzePage> {
     );
     await ChatStorage.saveChat(chat);
     onChatSaved?.call();
-    print('💾 Chat saved: $chatName');
   }
 
   void _navigateToSummary(String chatName, ChatAnalytics analytics) {
@@ -628,6 +628,7 @@ class ImportAnalyzePageState extends State<ImportAnalyzePage> {
     int totalMessages = 0;
     final Map<String, PersonStats> personStats = {};
     final Map<String, int> totalWordFreq = {};
+    final Map<String, int> totalEmojiFreq = {};  // emoji -> count (global)
     final Map<String, int> activityMap = {};   // yyyy-MM-dd → count
     final Map<int, int> hourlyActivityMap = {};  // hour (0-23) → count
     final Map<int, int> weekdayActivityMap = {};  // weekday (1=Mon to 7=Sun) → count
@@ -636,6 +637,8 @@ class ImportAnalyzePageState extends State<ImportAnalyzePage> {
     DateTime? lastDate;
     String? lastSender;
     DateTime? lastMessageTime;  // Full timestamp for response time calculation
+    final List<String> allMessageTexts = [];  // For overall sentiment analysis
+    final Map<String, List<String>> personMessages = {};  // Per-person messages for sentiment
 
     final totalLines = lines.length;
     int matchedLines = 0;
@@ -649,10 +652,22 @@ class ImportAnalyzePageState extends State<ImportAnalyzePage> {
       if (ps != null) {
         // Links
         ps.links += _linkRegex.allMatches(text).length;
-        // Emojis
+        // Emojis - count per person
         ps.emojis += _emojiRegex.allMatches(text).length;
         // Letters (non-whitespace characters)
         ps.letters += text.replaceAll(RegExp(r'\s'), '').length;
+      }
+
+      // Extract emojis globally
+      final emojiMatches = _emojiRegex.allMatches(text);
+      for (final match in emojiMatches) {
+        final emoji = match.group(0);
+        if (emoji != null) {
+          totalEmojiFreq[emoji] = (totalEmojiFreq[emoji] ?? 0) + 1;
+          if (ps != null) {
+            ps.emojiFrequency[emoji] = (ps.emojiFrequency[emoji] ?? 0) + 1;
+          }
+        }
       }
 
       // Words
@@ -794,6 +809,12 @@ class ImportAnalyzePageState extends State<ImportAnalyzePage> {
         if (message.isEmpty) continue;
 
         countWords(message, ps);
+        
+        // Collect message text for sentiment analysis
+        if (message.isNotEmpty && !message.startsWith('<Media omitted>')) {
+          allMessageTexts.add(message);
+          personMessages.putIfAbsent(sender, () => []).add(message);
+        }
       } else {
         // ── Multi-line continuation ──
         if (line.isNotEmpty &&
@@ -804,6 +825,12 @@ class ImportAnalyzePageState extends State<ImportAnalyzePage> {
           if (cleaned.isNotEmpty && !cleaned.contains('end-to-end encrypted')) {
             final ps = lastSender != null ? personStats[lastSender] : null;
             countWords(cleaned, ps);
+            
+            // Collect for sentiment analysis
+            if (cleaned.isNotEmpty && lastSender != null) {
+              allMessageTexts.add(cleaned);
+              personMessages.putIfAbsent(lastSender, () => []).add(cleaned);
+            }
           }
         }
       }
@@ -902,6 +929,113 @@ class ImportAnalyzePageState extends State<ImportAnalyzePage> {
     print('📊 Word length distribution (unique words): $lengthCounts');
     print('📊 Sample 9+ char words: ${totalWordFreq.keys.where((w) => w.length >= 9).take(10).toList()}');
 
+    // ── Step 6: Perform Sentiment Analysis ───────────────────────────
+    SentimentStats? overallSentiment;
+    if (allMessageTexts.isNotEmpty) {
+      print('🧠 Analyzing sentiment for ${allMessageTexts.length} messages...');
+      try {
+        final analyzer = SentimentAnalyzer.instance;
+        await analyzer.initialize();
+        
+        // Analyze all overall messages
+        final results = await analyzer.analyzeBatch(allMessageTexts);
+        
+        double totalPositive = 0;
+        double totalNegative = 0;
+        double totalNeutral = 0;
+        int positiveCount = 0;
+        int negativeCount = 0;
+        int neutralCount = 0;
+        int analyzedCount = 0;
+        
+        for (final result in results) {
+          if (result != null) {
+            totalPositive += result.positiveScore;
+            totalNegative += result.negativeScore;
+            totalNeutral += result.neutralScore;
+            analyzedCount++;
+            
+            final label = result.label;
+            if (label == 'positive') {
+              positiveCount++;
+            } else if (label == 'negative') {
+              negativeCount++;
+            } else {
+              neutralCount++;
+            }
+          }
+        }
+        
+        if (analyzedCount > 0) {
+          overallSentiment = SentimentStats(
+            averagePositive: totalPositive / analyzedCount,
+            averageNegative: totalNegative / analyzedCount,
+            averageNeutral: totalNeutral / analyzedCount,
+            positiveCount: positiveCount,
+            negativeCount: negativeCount,
+            neutralCount: neutralCount,
+            totalMessages: analyzedCount,
+          );
+          print('✅ Overall sentiment analysis complete: ${overallSentiment.positivePercent.toStringAsFixed(1)}% positive');
+        }
+        
+        // Analyze per-person sentiment
+        print('🧠 Analyzing per-person sentiment...');
+        for (final entry in personMessages.entries) {
+          final personName = entry.key;
+          final messages = entry.value;
+          
+          if (messages.isEmpty) continue;
+          
+          // Analyze all messages for this person
+          final personResults = await analyzer.analyzeBatch(messages);
+          
+          double personPositive = 0;
+          double personNegative = 0;
+          double personNeutral = 0;
+          int personPosCount = 0;
+          int personNegCount = 0;
+          int personNeuCount = 0;
+          int personAnalyzedCount = 0;
+          
+          for (final result in personResults) {
+            if (result != null) {
+              personPositive += result.positiveScore;
+              personNegative += result.negativeScore;
+              personNeutral += result.neutralScore;
+              personAnalyzedCount++;
+              
+              final label = result.label;
+              if (label == 'positive') {
+                personPosCount++;
+              } else if (label == 'negative') {
+                personNegCount++;
+              } else {
+                personNeuCount++;
+              }
+            }
+          }
+          
+          if (personAnalyzedCount > 0 && personStats.containsKey(personName)) {
+            personStats[personName]!.sentimentStats = SentimentStats(
+              averagePositive: personPositive / personAnalyzedCount,
+              averageNegative: personNegative / personAnalyzedCount,
+              averageNeutral: personNeutral / personAnalyzedCount,
+              positiveCount: personPosCount,
+              negativeCount: personNegCount,
+              neutralCount: personNeuCount,
+              totalMessages: personAnalyzedCount,
+            );
+            print('  ✅ $personName: ${personStats[personName]!.sentimentStats!.positivePercent.toStringAsFixed(1)}% positive');
+          }
+        }
+      } catch (e) {
+        print('⚠️ Sentiment analysis failed: $e');
+      }
+    }
+
+    print('📊 Total emojis found: ${totalEmojiFreq.length} unique, ${totalEmojiFreq.values.fold(0, (a, b) => a + b)} total');
+
     return ChatAnalytics(
       totalWords: totalWords,
       readingTimeMinutes: readingTimeMinutes,
@@ -911,6 +1045,7 @@ class ImportAnalyzePageState extends State<ImportAnalyzePage> {
       personStats: personStats,
       activityMap: activityMap,
       totalWordFrequency: totalWordFreq,
+      totalEmojiFrequency: totalEmojiFreq,
       hourlyActivityMap: hourlyActivityMap,
       weekdayActivityMap: weekdayActivityMap,
       firstMessageDate: firstDate,
@@ -919,6 +1054,7 @@ class ImportAnalyzePageState extends State<ImportAnalyzePage> {
       longestStreakEnd: longestStreakEnd,
       currentStreakStart: currentStreakStart,
       currentStreakEnd: currentStreakEnd,
+      overallSentiment: overallSentiment,
     );
   }
 

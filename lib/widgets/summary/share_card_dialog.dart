@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -44,6 +43,8 @@ class _ShareCardDialogState extends State<ShareCardDialog> {
   bool _showMessageRate = false;
   bool _showTopWords = false;
   bool _showPeakTime = false;
+  bool _showSentiment = false;
+  bool _showTopEmojis = false;
 
   String _getPeakHour() {
     final a = widget.analytics;
@@ -75,34 +76,49 @@ class _ShareCardDialogState extends State<ShareCardDialog> {
     return '${rate.toStringAsFixed(1)}/day';
   }
 
+  String _getSentimentText() {
+    final sentiment = widget.analytics.overallSentiment;
+    if (sentiment == null) return 'N/A';
+    final pos = sentiment.positivePercent.toStringAsFixed(0);
+    final neg = sentiment.negativePercent.toStringAsFixed(0);
+    final neu = sentiment.neutralPercent.toStringAsFixed(0);
+    return '😊$pos% 😐$neu% 😞$neg%';
+  }
+
+  String _getTopEmojisText() {
+    final emojis = widget.analytics.totalTopEmojis(5);
+    if (emojis.isEmpty) return 'N/A';
+    return emojis.map((e) => e.key).join(' ');
+  }
 
 
-  List<Widget> _buildActiveStats() {
-    final stats = <Widget>[];
+
+  Map<String, List<Widget>> _buildActiveStats() {
+    final regularStats = <Widget>[];
+    final wideStats = <Widget>[];
     final a = widget.analytics;
-    
-    
-      // final a = widget.analytics; // Removed duplicate
-      final loc = AppLocalizations.of(context)!;
+    final loc = AppLocalizations.of(context)!;
       
-      if (_showMessages) stats.add(_statTile(loc.translate('messages'), widget.fmtNum(a.totalMessages), Icons.chat_bubble));
-      if (_showWords) stats.add(_statTile(loc.translate('words'), widget.fmtNum(widget.wordCount), Icons.text_fields));
-      if (_showDaysActive) stats.add(_statTile(loc.translate('active_days'), '${a.activityMap.length}', Icons.calendar_today));
-      if (_showStreak) stats.add(_statTile(loc.translate('longest_streak').replaceAll('Longest ', ''), '${a.longestStreak}d', Icons.local_fire_department));
-      if (_showEmojis) {
-        final totalEmojis = a.personStats.values.fold(0, (sum, ps) => sum + ps.emojis);
-        stats.add(_statTile(loc.translate('emojis'), widget.fmtNum(totalEmojis), Icons.emoji_emotions));
-      }
-      if (_showMedia) {
-        final totalMedia = a.personStats.values.fold(0, (sum, ps) => sum + ps.media);
-        stats.add(_statTile(loc.translate('media'), widget.fmtNum(totalMedia), Icons.photo));
-      }
-      if (_showMessageRate) stats.add(_statTile('Rate', _getMessageRate(), Icons.speed));
-      if (_showPeakTime) stats.add(_statTile('Peak Time', _getPeakHour(), Icons.access_time));
-      if (_showTopWords) stats.add(_statTile(loc.translate('top_words'), _getTopWordsText(), Icons.abc, isWide: true));
-      
-      return stats;
+    if (_showMessages) regularStats.add(_statTile(loc.translate('messages'), widget.fmtNum(a.totalMessages), Icons.chat_bubble));
+    if (_showWords) regularStats.add(_statTile(loc.translate('words'), widget.fmtNum(widget.wordCount), Icons.text_fields));
+    if (_showDaysActive) regularStats.add(_statTile(loc.translate('active_days'), '${a.activityMap.length}', Icons.calendar_today));
+    if (_showStreak) regularStats.add(_statTile(loc.translate('longest_streak').replaceAll('Longest ', ''), '${a.longestStreak}d', Icons.local_fire_department));
+    if (_showEmojis) {
+      final totalEmojis = a.personStats.values.fold(0, (sum, ps) => sum + ps.emojis);
+      regularStats.add(_statTile(loc.translate('emojis'), widget.fmtNum(totalEmojis), Icons.emoji_emotions));
     }
+    if (_showMedia) {
+      final totalMedia = a.personStats.values.fold(0, (sum, ps) => sum + ps.media);
+      regularStats.add(_statTile(loc.translate('media'), widget.fmtNum(totalMedia), Icons.photo));
+    }
+    if (_showMessageRate) regularStats.add(_statTile('Rate', _getMessageRate(), Icons.speed));
+    if (_showPeakTime) regularStats.add(_statTile('Peak Time', _getPeakHour(), Icons.access_time));
+    if (_showTopWords) wideStats.add(_statTile(loc.translate('top_words'), _getTopWordsText(), Icons.abc, isWide: true));
+    if (_showSentiment) wideStats.add(_statTile('Sentiment', _getSentimentText(), Icons.psychology, isWide: true));
+    if (_showTopEmojis) wideStats.add(_statTile('Top Emojis', _getTopEmojisText(), Icons.emoji_emotions, isWide: true));
+      
+    return {'regular': regularStats, 'wide': wideStats};
+  }
     
     Widget _statTile(String label, String value, IconData icon, {bool isWide = false}) {
       return Container(
@@ -140,23 +156,35 @@ class _ShareCardDialogState extends State<ShareCardDialog> {
     @override
     Widget build(BuildContext context) {
       final loc = AppLocalizations.of(context)!;
-      final activeStats = _buildActiveStats();
+      final statsMap = _buildActiveStats();
+      final regularStats = statsMap['regular']!;
+      final wideStats = statsMap['wide']!;
+      final hasStats = regularStats.isNotEmpty || wideStats.isNotEmpty;
       final rows = <Widget>[];
       
-      for (int i = 0; i < activeStats.length; i += 2) {
-        if (i + 1 < activeStats.length) {
+      // Build regular stats in pairs
+      for (int i = 0; i < regularStats.length; i += 2) {
+        if (i + 1 < regularStats.length) {
           rows.add(Row(children: [
-            Expanded(child: activeStats[i]),
+            Expanded(child: regularStats[i]),
             const SizedBox(width: 12),
-            Expanded(child: activeStats[i + 1]),
+            Expanded(child: regularStats[i + 1]),
           ]));
         } else {
           rows.add(Row(children: [
-            Expanded(child: activeStats[i]),
+            Expanded(child: regularStats[i]),
             const Spacer(),
           ]));
         }
-        if (i + 2 < activeStats.length) rows.add(const SizedBox(height: 12));
+        if (i + 2 < regularStats.length || wideStats.isNotEmpty) {
+          rows.add(const SizedBox(height: 12));
+        }
+      }
+      
+      // Add wide stats as full-width rows
+      for (int i = 0; i < wideStats.length; i++) {
+        rows.add(wideStats[i]);
+        if (i + 1 < wideStats.length) rows.add(const SizedBox(height: 12));
       }
       
       return Dialog(
@@ -192,6 +220,8 @@ class _ShareCardDialogState extends State<ShareCardDialog> {
                         _buildToggleChip('Rate', _showMessageRate, (v) => setState(() => _showMessageRate = v)),
                         _buildToggleChip('Peak Time', _showPeakTime, (v) => setState(() => _showPeakTime = v)),
                         _buildToggleChip(loc.translate('top_words'), _showTopWords, (v) => setState(() => _showTopWords = v)),
+                        _buildToggleChip('Sentiment', _showSentiment, (v) => setState(() => _showSentiment = v)),
+                        _buildToggleChip('Top Emojis', _showTopEmojis, (v) => setState(() => _showTopEmojis = v)),
                       ],
                     ),
                   ],
@@ -270,7 +300,7 @@ class _ShareCardDialogState extends State<ShareCardDialog> {
                       const SizedBox(height: 20),
                       
                       // Stats grid
-                      if (activeStats.isNotEmpty) ...rows,
+                      if (hasStats) ...rows,
                       
                       const SizedBox(height: 16),
                       
@@ -299,7 +329,7 @@ class _ShareCardDialogState extends State<ShareCardDialog> {
               
               // Share button
               ElevatedButton.icon(
-                onPressed: activeStats.isEmpty ? null : _shareCard,
+                onPressed: hasStats ? _shareCard : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: widget.primary,
                   foregroundColor: Colors.white,
@@ -307,7 +337,7 @@ class _ShareCardDialogState extends State<ShareCardDialog> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                 ),
                 icon: const Icon(Icons.share_rounded),
-                label: Text(activeStats.isEmpty ? loc.translate('select_stat') : loc.translate('share_card')),
+                label: Text(hasStats ? loc.translate('share_card') : loc.translate('select_stat')),
               ),
             ],
           ),

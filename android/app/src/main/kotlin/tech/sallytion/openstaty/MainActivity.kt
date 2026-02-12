@@ -1,4 +1,4 @@
-package com.example.open_staty
+package tech.sallytion.openstaty
 
 import android.content.Intent
 import android.net.Uri
@@ -10,7 +10,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.open_staty/share"
+    private val CHANNEL = "tech.sallytion.openstaty/share"
     private var sharedFilePath: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

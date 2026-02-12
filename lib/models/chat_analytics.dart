@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../services/sentiment_analyzer.dart';
 
 /// Per-person statistics
 class PersonStats {
@@ -11,6 +12,7 @@ class PersonStats {
   int links;
   int emojis;
   Map<String, int> wordFrequency;
+  Map<String, int> emojiFrequency;
   
   // Response time tracking
   double totalResponseTimeMinutes;
@@ -22,6 +24,9 @@ class PersonStats {
   
   // Weekday activity tracking
   Map<int, int> weekdayActivityMap; // weekday (1=Monday to 7=Sunday) -> message count
+  
+  // Sentiment analysis
+  SentimentStats? sentimentStats;
 
   PersonStats({
     required this.name,
@@ -33,12 +38,15 @@ class PersonStats {
     this.links = 0,
     this.emojis = 0,
     Map<String, int>? wordFrequency,
+    Map<String, int>? emojiFrequency,
     this.totalResponseTimeMinutes = 0.0,
     this.responseCount = 0,
     this.conversationsStarted = 0,
     Map<int, int>? hourlyActivityMap,
     Map<int, int>? weekdayActivityMap,
+    this.sentimentStats,
   }) : wordFrequency = wordFrequency ?? {},
+       emojiFrequency = emojiFrequency ?? {},
        hourlyActivityMap = hourlyActivityMap ?? {},
        weekdayActivityMap = weekdayActivityMap ?? {};
 
@@ -62,6 +70,13 @@ class PersonStats {
     return sorted.take(n).toList();
   }
 
+  /// Top N emojis sorted by frequency
+  List<MapEntry<String, int>> topEmojis(int n) {
+    final sorted = emojiFrequency.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return sorted.take(n).toList();
+  }
+
   Map<String, dynamic> toJson() => {
         'name': name,
         'messages': messages,
@@ -72,11 +87,13 @@ class PersonStats {
         'links': links,
         'emojis': emojis,
         'wordFrequency': wordFrequency,
+        'emojiFrequency': emojiFrequency,
         'totalResponseTimeMinutes': totalResponseTimeMinutes,
         'responseCount': responseCount,
         'conversationsStarted': conversationsStarted,
         'hourlyActivityMap': hourlyActivityMap.map((k, v) => MapEntry(k.toString(), v)),
         'weekdayActivityMap': weekdayActivityMap.map((k, v) => MapEntry(k.toString(), v)),
+        'sentimentStats': sentimentStats?.toJson(),
       };
 
   factory PersonStats.fromJson(Map<String, dynamic> json) => PersonStats(
@@ -91,6 +108,9 @@ class PersonStats {
         wordFrequency: (json['wordFrequency'] as Map<String, dynamic>?)
                 ?.map((k, v) => MapEntry(k, v as int)) ??
             {},
+        emojiFrequency: (json['emojiFrequency'] as Map<String, dynamic>?)
+                ?.map((k, v) => MapEntry(k, v as int)) ??
+            {},
         totalResponseTimeMinutes: (json['totalResponseTimeMinutes'] as num?)?.toDouble() ?? 0.0,
         responseCount: json['responseCount'] as int? ?? 0,
         conversationsStarted: json['conversationsStarted'] as int? ?? 0,
@@ -102,6 +122,9 @@ class PersonStats {
             ? (json['weekdayActivityMap'] as Map<String, dynamic>)
                 .map((k, v) => MapEntry(int.parse(k), (v as num).toInt()))
             : {},
+        sentimentStats: json['sentimentStats'] != null
+            ? SentimentStats.fromJson(json['sentimentStats'] as Map<String, dynamic>)
+            : null,
       );
 }
 
@@ -116,6 +139,7 @@ class ChatAnalytics {
   final Map<String, PersonStats> personStats; // name -> stats
   final Map<String, int> activityMap; // "yyyy-MM-dd" -> message count
   final Map<String, int> totalWordFrequency; // word -> count (combined)
+  final Map<String, int> totalEmojiFrequency; // emoji -> count (combined)
   final Map<int, int> hourlyActivityMap; // hour (0-23) -> message count
   final Map<int, int> weekdayActivityMap; // weekday (1=Monday to 7=Sunday) -> message count
   final DateTime? firstMessageDate;
@@ -126,6 +150,9 @@ class ChatAnalytics {
   final DateTime? longestStreakEnd;
   final DateTime? currentStreakStart;
   final DateTime? currentStreakEnd;
+  
+  // Sentiment analysis
+  final SentimentStats? overallSentiment;
 
   ChatAnalytics({
     required this.totalWords,
@@ -136,6 +163,7 @@ class ChatAnalytics {
     required this.personStats,
     required this.activityMap,
     required this.totalWordFrequency,
+    this.totalEmojiFrequency = const {},
     this.hourlyActivityMap = const {},
     this.weekdayActivityMap = const {},
     this.firstMessageDate,
@@ -144,9 +172,17 @@ class ChatAnalytics {
     this.longestStreakEnd,
     this.currentStreakStart,
     this.currentStreakEnd,
+    this.overallSentiment,
   });
 
   List<String> get personNames => personStats.keys.toList();
+
+  /// Top N emojis sorted by frequency (combined)
+  List<MapEntry<String, int>> totalTopEmojis(int n) {
+    final sorted = totalEmojiFrequency.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return sorted.take(n).toList();
+  }
 
   List<MapEntry<String, int>> totalTopWords(int n) {
     final sorted = totalWordFrequency.entries.toList()
@@ -173,6 +209,7 @@ class ChatAnalytics {
             personStats.map((k, v) => MapEntry(k, v.toJson())),
         'activityMap': activityMap,
         'totalWordFrequency': totalWordFrequency,
+        'totalEmojiFrequency': totalEmojiFrequency,
         'hourlyActivityMap': hourlyActivityMap.map((k, v) => MapEntry(k.toString(), v)),
         'weekdayActivityMap': weekdayActivityMap.map((k, v) => MapEntry(k.toString(), v)),
         'firstMessageDate': firstMessageDate?.toIso8601String(),
@@ -181,6 +218,7 @@ class ChatAnalytics {
         'longestStreakEnd': longestStreakEnd?.toIso8601String(),
         'currentStreakStart': currentStreakStart?.toIso8601String(),
         'currentStreakEnd': currentStreakEnd?.toIso8601String(),
+        'overallSentiment': overallSentiment?.toJson(),
       };
 
   factory ChatAnalytics.fromJson(Map<String, dynamic> json) {
@@ -198,6 +236,9 @@ class ChatAnalytics {
               ?.map((k, v) => MapEntry(k, v as int)) ??
           {},
       totalWordFrequency: (json['totalWordFrequency'] as Map<String, dynamic>?)
+              ?.map((k, v) => MapEntry(k, v as int)) ??
+          {},
+      totalEmojiFrequency: (json['totalEmojiFrequency'] as Map<String, dynamic>?)
               ?.map((k, v) => MapEntry(k, v as int)) ??
           {},
       hourlyActivityMap: json['hourlyActivityMap'] != null
@@ -225,6 +266,9 @@ class ChatAnalytics {
           : null,
       currentStreakEnd: json['currentStreakEnd'] != null
           ? DateTime.parse(json['currentStreakEnd'] as String)
+          : null,
+      overallSentiment: json['overallSentiment'] != null
+          ? SentimentStats.fromJson(json['overallSentiment'] as Map<String, dynamic>)
           : null,
     );
   }
